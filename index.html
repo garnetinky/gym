@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b2433">
+<title>Lift Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#e8ebef;--card:#fff;--ink:#1b2433;--mute:#667085;--line:#d3d8df;--acc:#2f5bea;--accink:#fff;--pr:#d99a00;--field:#f3f5f8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141a24;--card:#1e2634;--ink:#eef1f5;--mute:#93a0b4;--line:#2d3748;--acc:#6f8fff;--accink:#101626;--pr:#f0b429;--field:#161d29}}
+*{box-sizing:border-box}
+html{color-scheme:light dark;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 Barlow,system-ui,sans-serif;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+main{max-width:620px;margin:0 auto;padding:16px 14px 60px}
+h1,h2,.num{font-family:"Barlow Condensed","Arial Narrow",sans-serif;font-weight:700;letter-spacing:.01em}
+h1{font-size:34px;margin:6px 0 12px;line-height:1}
+h2{font-size:24px;margin:0}
+nav,.pills{display:flex;gap:6px;margin-bottom:14px}
+nav button,.pills button{flex:1;padding:10px 6px;border:2px solid var(--ink);background:transparent;color:var(--ink);font:600 15px Barlow,sans-serif;border-radius:8px;cursor:pointer}
+.pills button{border-color:var(--line)}
+nav button[aria-pressed=true],.pills button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.card{background:var(--card);border-radius:10px;padding:14px;margin-bottom:12px;border-left:6px solid var(--acc)}
+.row{display:flex;gap:8px;align-items:center}
+.sp{justify-content:space-between}
+.hint{color:var(--mute);font-size:14px;margin:2px 0 8px}
+.set{display:grid;grid-template-columns:26px 1fr 14px 1fr;gap:8px;align-items:center;margin-top:6px}
+.set .n{color:var(--mute);font-weight:600;text-align:center}
+.set i{font-style:normal;color:var(--mute);text-align:center}
+input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--ink);font:500 17px Barlow,sans-serif;min-width:0}
+input[type=number]{text-align:center}
+.btn{padding:9px 14px;border:0;border-radius:8px;background:var(--acc);color:var(--accink);font:600 15px Barlow,sans-serif;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.del{background:transparent;color:#d92d20;border:1px solid var(--line);padding:9px 12px}
+.add{margin-top:10px}
+.pr{color:var(--pr);font-weight:700}
+.chart{width:100%;height:auto;display:block}
+.chart text{fill:var(--mute);font:12px Barlow,sans-serif}
+table{width:100%;border-collapse:collapse;font-size:15px}
+td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
+th{color:var(--mute);font-weight:500}
+.scroll{overflow-x:auto}
+.empty{color:var(--mute);padding:14px 0}
+.status{color:var(--mute);font-size:13px;text-align:right;min-height:18px}
+label.l{display:block;color:var(--mute);font-size:14px;margin:0 0 4px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Lift Log</h1>
+  <nav id="tabs"></nav>
+  <div id="view"></div>
+</main>
+<script>
+(function(){
+var KEY='liftlog.v1';
+var DEFAULT={sessions:[
+ {name:'Session 1',ex:[{id:'a1',name:'Bench press'},{id:'a2',name:'Overhead press'},{id:'a3',name:'Incline dumbbell press'},{id:'a4',name:'Triceps pushdown'}]},
+ {name:'Session 2',ex:[{id:'b1',name:'Deadlift'},{id:'b2',name:'Barbell row'},{id:'b3',name:'Lat pulldown'},{id:'b4',name:'Bicep curl'}]},
+ {name:'Session 3',ex:[{id:'c1',name:'Squat'},{id:'c2',name:'Romanian deadlift'},{id:'c3',name:'Leg press'},{id:'c4',name:'Calf raise'}]}
+],logs:{}};
+var S=load(),tab='log',cur=0,date=today(),pex=null,metric='top',status='';
+
+function load(){try{var r=localStorage.getItem(KEY);if(r){var d=JSON.parse(r);if(d&&d.sessions&&d.logs)return d}}catch(e){}return JSON.parse(JSON.stringify(DEFAULT))}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(S));flash('Saved on this device')}catch(e){flash('Could not save: storage unavailable')}}
+function flash(t){var el=document.getElementById('st');if(el)el.textContent=t}
+function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function uid(){return 'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)}
+function fmtDate(d){var p=d.split('-');return new Date(p[0],p[1]-1,p[2]).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}
+function key(){return date+'|'+cur}
+function e1rm(w,r){return r>1?w*(1+r/30):w}
+function fmt(n){return Math.round(n*10)/10}
+
+function tabs(){
+ var t=[['log','Log'],['progress','Progress'],['setup','Setup']];
+ document.getElementById('tabs').innerHTML=t.map(function(x){return '<button data-tab="'+x[0]+'" aria-pressed="'+(tab===x[0])+'">'+x[1]+'</button>'}).join('');
+}
+function render(){tabs();var v=document.getElementById('view');v.innerHTML=tab==='log'?logView():tab==='progress'?progView():setupView();if(tab==='progress')drawChart()}
+
+/* ---------- Log ---------- */
+function lastFor(id){
+ var best=null;
+ Object.keys(S.logs).forEach(function(k){var l=S.logs[k];if(l.date<date&&l.ex[id]&&l.ex[id].length&&(!best||l.date>best.date))best={date:l.date,sets:l.ex[id]}});
+ return best;
+}
+function setRow(i,w,r){return '<div class="set"><span class="n">'+(i+1)+'</span><input class="w" type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" aria-label="Set '+(i+1)+' weight in kg" value="'+(w===undefined?'':w)+'"><i>×</i><input class="r" type="number" inputmode="numeric" min="0" placeholder="reps" aria-label="Set '+(i+1)+' reps" value="'+(r===undefined?'':r)+'"></div>'}
+function logView(){
+ var s=S.sessions[cur],rec=S.logs[key()];
+ var h='<div class="pills">'+S.sessions.map(function(x,i){return '<button data-sess="'+i+'" aria-pressed="'+(cur===i)+'">'+esc(x.name)+'</button>'}).join('')+'</div>';
+ h+='<label class="l" for="d">Date</label><input type="date" id="d" value="'+date+'" style="margin-bottom:14px">';
+ if(!s.ex.length)return h+'<p class="empty">No exercises yet. Add some in Setup.</p>';
+ s.ex.forEach(function(e){
+  var sets=(rec&&rec.ex[e.id])||[];var n=Math.max(3,sets.length);
+  var l=lastFor(e.id);
+  h+='<section class="card" data-ex="'+e.id+'"><h2>'+esc(e.name)+'</h2><p class="hint">'+(l?'Last ('+fmtDate(l.date)+'): '+l.sets.map(function(x){return x[0]+'×'+x[1]}).join(', '):'No previous entry')+'</p><div class="sets">';
+  for(var i=0;i<n;i++)h+=setRow(i,sets[i]&&sets[i][0],sets[i]&&sets[i][1]);
+  h+='</div><button class="btn ghost add" data-add>Add set</button></section>';
+ });
+ return h+'<div class="status" id="st">Entries save automatically</div>';
+}
+function saveCard(card){
+ var id=card.dataset.ex,sets=[];
+ card.querySelectorAll('.set').forEach(function(r){
+  var w=r.querySelector('.w').value,rp=r.querySelector('.r').value;
+  if(w!==''&&rp!=='')sets.push([parseFloat(w),parseInt(rp,10)]);
+ });
+ var k=key(),rec=S.logs[k];
+ if(sets.length){if(!rec)rec=S.logs[k]={date:date,s:cur,ex:{}};rec.ex[id]=sets}
+ else if(rec){delete rec.ex[id];if(!Object.keys(rec.ex).length)delete S.logs[k]}
+ persist();
+}
+
+/* ---------- Progress ---------- */
+function allEx(){var a=[];S.sessions.forEach(function(s){s.ex.forEach(function(e){a.push({id:e.id,name:e.name,sess:s.name})})});return a}
+function series(id){
+ var out=[];
+ Object.keys(S.logs).forEach(function(k){var l=S.logs[k],sets=l.ex[id];if(!sets||!sets.length)return;
+  var top=0,est=0;sets.forEach(function(x){top=Math.max(top,x[0]);est=Math.max(est,e1rm(x[0],x[1]))});
+  out.push({date:l.date,sets:sets,top:top,est:est});
+ });
+ return out.sort(function(a,b){return a.date<b.date?-1:1});
+}
+function progView(){
+ var ex=allEx();
+ if(!ex.length)return '<p class="empty">Add exercises in Setup first.</p>';
+ if(!pex||!ex.some(function(e){return e.id===pex}))pex=ex[0].id;
+ var h='<label class="l" for="pe">Exercise</label><select id="pe" style="margin-bottom:10px">'+ex.map(function(e){return '<option value="'+e.id+'"'+(e.id===pex?' selected':'')+'>'+esc(e.name)+' ('+esc(e.sess)+')</option>'}).join('')+'</select>';
+ h+='<div class="pills"><button data-metric="top" aria-pressed="'+(metric==='top')+'">Top weight</button><button data-metric="est" aria-pressed="'+(metric==='est')+'">Estimated 1RM</button></div>';
+ var d=series(pex);
+ if(!d.length)return h+'<p class="empty">Nothing logged for this exercise yet. Log a session and it will appear here.</p>';
+ var max=Math.max.apply(null,d.map(function(x){return x[metric]}));
+ var first=d[0][metric],last=d[d.length-1][metric];
+ h+='<div class="card"><div class="row sp"><div><div class="hint" style="margin:0">Best</div><div class="num pr" style="font-size:34px">'+fmt(max)+' kg</div></div><div style="text-align:right"><div class="hint" style="margin:0">Change since first</div><div class="num" style="font-size:34px">'+(last-first>=0?'+':'')+fmt(last-first)+' kg</div></div></div><svg class="chart" id="ch" viewBox="0 0 600 260" role="img" aria-label="Progress chart"></svg></div>';
+ h+='<div class="card scroll"><table><tr><th>Date</th><th>Sets</th><th>Top</th><th>Est. 1RM</th></tr>'+d.slice().reverse().map(function(x){return '<tr><td>'+fmtDate(x.date)+'</td><td>'+x.sets.map(function(s){return s[0]+'×'+s[1]}).join(', ')+'</td><td'+(x.top===Math.max.apply(null,d.map(function(y){return y.top}))?' class="pr"':'')+'>'+fmt(x.top)+'</td><td>'+fmt(x.est)+'</td></tr>'}).join('')+'</table></div>';
+ return h;
+}
+function drawChart(){
+ var svg=document.getElementById('ch');if(!svg)return;
+ var d=series(pex);if(!d.length)return;
+ var W=600,H=260,L=44,R=16,T=16,B=32;
+ var vals=d.map(function(x){return x[metric]});
+ var lo=Math.min.apply(null,vals),hi=Math.max.apply(null,vals);
+ if(hi===lo){hi+=5;lo=Math.max(0,lo-5)}else{var p=(hi-lo)*.15;hi+=p;lo=Math.max(0,lo-p)}
+ var t0=new Date(d[0].date).getTime(),t1=new Date(d[d.length-1].date).getTime();
+ function X(dt){return d.length===1||t1===t0?(L+W-R)/2:L+(new Date(dt).getTime()-t0)/(t1-t0)*(W-L-R)}
+ function Y(v){return T+(1-(v-lo)/(hi-lo))*(H-T-B)}
+ var s='';
+ for(var i=0;i<=3;i++){var v=lo+(hi-lo)*i/3,y=Y(v);s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'" stroke="var(--line)"/><text x="'+(L-6)+'" y="'+(y+4)+'" text-anchor="end">'+Math.round(v)+'</text>'}
+ s+='<polyline fill="none" stroke="var(--acc)" stroke-width="3" stroke-linejoin="round" points="'+d.map(function(x){return X(x.date)+','+Y(x[metric])}).join(' ')+'"/>';
+ var mx=Math.max.apply(null,vals);
+ d.forEach(function(x){s+='<circle cx="'+X(x.date)+'" cy="'+Y(x[metric])+'" r="'+(x[metric]===mx?6:4)+'" fill="'+(x[metric]===mx?'var(--pr)':'var(--acc)')+'"/>'});
+ s+='<text x="'+X(d[0].date)+'" y="'+(H-8)+'" text-anchor="'+(d.length>1?'start':'middle')+'">'+fmtDate(d[0].date)+'</text>';
+ if(d.length>1)s+='<text x="'+X(d[d.length-1].date)+'" y="'+(H-8)+'" text-anchor="end">'+fmtDate(d[d.length-1].date)+'</text>';
+ svg.innerHTML=s;
+}
+
+/* ---------- Setup ---------- */
+function setupView(){
+ var h='<p class="hint">Rename sessions and edit the exercises in each. Past entries are kept if you rename an exercise.</p>';
+ S.sessions.forEach(function(s,si){
+  h+='<section class="card" data-si="'+si+'"><label class="l">Session name</label><input class="sname" value="'+esc(s.name)+'" style="margin-bottom:10px">';
+  s.ex.forEach(function(e){h+='<div class="row" style="margin-top:6px" data-eid="'+e.id+'"><input class="ename" value="'+esc(e.name)+'" aria-label="Exercise name"><button class="btn del" data-del aria-label="Remove '+esc(e.name)+'">Remove</button></div>'});
+  h+='<button class="btn ghost add" data-newex>Add exercise</button></section>';
+ });
+ h+='<section class="card"><h2>Back up</h2><p class="hint">Data lives in this browser only. Export a copy now and then, and import it to move to another device.</p><div class="row"><button class="btn" data-export>Export</button><button class="btn ghost" data-import>Import</button><button class="btn del" data-reset>Reset</button></div><input type="file" id="file" accept="application/json" hidden></section><div class="status" id="st"></div>';
+ return h;
+}
+
+/* ---------- Events ---------- */
+var view=document.getElementById('view');
+document.getElementById('tabs').addEventListener('click',function(e){var b=e.target.closest('[data-tab]');if(b){tab=b.dataset.tab;render()}});
+view.addEventListener('click',function(e){
+ var t=e.target.closest('button');if(!t)return;
+ if(t.dataset.sess!==undefined){cur=+t.dataset.sess;render()}
+ else if(t.dataset.metric){metric=t.dataset.metric;render()}
+ else if(t.hasAttribute('data-add')){var c=t.closest('.card'),box=c.querySelector('.sets'),n=box.children.length;box.insertAdjacentHTML('beforeend',setRow(n));box.lastElementChild.querySelector('.w').focus()}
+ else if(t.hasAttribute('data-newex')){var si=+t.closest('[data-si]').dataset.si;S.sessions[si].ex.push({id:uid(),name:'New exercise'});persist();render()}
+ else if(t.hasAttribute('data-del')){var row=t.closest('[data-eid]'),si2=+t.closest('[data-si]').dataset.si;S.sessions[si2].ex=S.sessions[si2].ex.filter(function(x){return x.id!==row.dataset.eid});persist();render()}
+ else if(t.hasAttribute('data-export')){var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,2)],{type:'application/json'}));a.download='lift-log-'+today()+'.json';a.click()}
+ else if(t.hasAttribute('data-import')){document.getElementById('file').click()}
+ else if(t.hasAttribute('data-reset')){if(confirm('Delete all sessions and logged lifts on this device?')){S=JSON.parse(JSON.stringify(DEFAULT));persist();render()}}
+});
+view.addEventListener('input',function(e){
+ var el=e.target;
+ if(el.classList.contains('w')||el.classList.contains('r')){saveCard(el.closest('.card'))}
+ else if(el.classList.contains('sname')){S.sessions[+el.closest('[data-si]').dataset.si].name=el.value||'Session';persist()}
+ else if(el.classList.contains('ename')){var si=+el.closest('[data-si]').dataset.si,id=el.closest('[data-eid]').dataset.eid;S.sessions[si].ex.forEach(function(x){if(x.id===id)x.name=el.value});persist()}
+});
+view.addEventListener('change',function(e){
+ var el=e.target;
+ if(el.id==='d'&&el.value){date=el.value;render()}
+ else if(el.id==='pe'){pex=el.value;render()}
+ else if(el.id==='file'&&el.files[0]){
+  var fr=new FileReader();
+  fr.onload=function(){try{var d=JSON.parse(fr.result);if(!d.sessions||!d.logs)throw 0;S=d;persist();render();flash('Imported')}catch(x){flash('That file is not a Lift Log backup')}};
+  fr.readAsText(el.files[0]);
+ }
+});
+render();
+})();
+</script>
+</body>
+</html>
